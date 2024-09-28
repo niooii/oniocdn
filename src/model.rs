@@ -8,7 +8,7 @@ pub struct Media {
 }
 
 pub struct UploadedMediaInfo {
-
+    bytes: Vec<u8>
 }
 
 // Model controllers    
@@ -28,6 +28,10 @@ impl MediaController {
 impl MediaController {
     pub async fn save_media(info: UploadedMediaInfo) {
         
+    }
+
+    pub async fn get_media( ) {
+
     }
 
     pub async fn delete_media() {

@@ -3,7 +3,7 @@ mod model;
 mod routes;
 
 use std::env;
-
+        
 use axum::{serve::serve, Router};
 use model::MediaController;
 use sqlx::PgPool;
@@ -16,6 +16,8 @@ async fn main() {
     let db_pool = PgPool::connect(
         env::var("DATABASE_URL").expect("Could not find DATABASE_URL in env").as_str()
     ).await.expect("Failed to connect to database");
+
+    sqlx::migrate!("./migrations").run(&db_pool).await.expect("Failed to run migrations.");
 
     let mc = MediaController::new(db_pool);
 
