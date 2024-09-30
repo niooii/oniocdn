@@ -47,6 +47,8 @@ async fn main_response_mapper(res: Response) -> Response {
                 "error": err_json.unwrap_or(json!("Failed to get error information."))
             });
 
+            println!("{:?}", client_err);
+
             (*status_code, Json(body)).into_response()
 
         });

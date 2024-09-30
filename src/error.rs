@@ -12,7 +12,8 @@ pub enum Error {
     AuthFailNoAuthToken,
     DatabaseConnectionError,
     DatabaseQueryError,
-    AxumError { why: String }
+    AxumError { why: String },
+    IOError
 }
 
 #[derive(Clone, Debug, AsRefStr, Serialize)]

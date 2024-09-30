@@ -1,4 +1,12 @@
+use std::{future::Future, pin::Pin};
+
+use futures::{Stream, StreamExt};
+use serde::Serialize;
+use sha2::{ Digest, Sha256};
 use sqlx::PgPool;
+use tokio::io::{AsyncRead, AsyncReadExt};
+use bytes::Bytes;
+use crate::error::{Error, Result};
 
 
 // Types
@@ -7,8 +15,16 @@ pub struct Media {
 
 }
 
+pub struct MediaUploadInfo {
+    pub filename: String,
+    pub bytes: Bytes
+}
+
+// Contains data needed to get the file's url.
+#[derive(Serialize)]
 pub struct UploadedMediaInfo {
-    bytes: Vec<u8>
+    pub filename: String,
+    pub hash: String
 }
 
 // Model controllers    
@@ -26,8 +42,33 @@ impl MediaController {
 }
 
 impl MediaController {
-    pub async fn save_media(info: UploadedMediaInfo) {
+    pub async fn upload_media(&self, mut info: MediaUploadInfo) -> Result<UploadedMediaInfo> {
+        let mut hasher = Sha256::new();
+
+        // while let Some(chunk_result) = info.bytes.next().await {
+        //     let chunk = chunk_result?;
+        //     hasher.update(&chunk);
+        //     total_bytes += chunk.len();
+        //     println!("got some bytes: {total_bytes}");
+        //     // Here you would typically write these bytes to storage
+        //     // For example: storage.write_chunk(&chunk).await?;
+        // }
+
+        let hash = format!("{:x}", hasher.finalize());
+
+        let uploaded_info = UploadedMediaInfo {
+            filename: info.filename,
+            hash,
+        };
+
+        self.complete_media_upload(&uploaded_info).await?;
+
+        Ok(uploaded_info)
+    }
+
+    pub async fn complete_media_upload(&self, info: &UploadedMediaInfo) -> Result<()> {
         
+        todo!()
     }
 
     pub async fn get_media( ) {
