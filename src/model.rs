@@ -1,5 +1,6 @@
 use std::{future::Future, pin::Pin};
 
+use axum::extract::multipart::Field;
 use futures::{Stream, StreamExt};
 use serde::Serialize;
 use sha2::{ Digest, Sha256};
@@ -15,9 +16,9 @@ pub struct Media {
 
 }
 
-pub struct MediaUploadInfo {
+pub struct MediaUploadInfo<'a> {
     pub filename: String,
-    pub bytes: Bytes
+    pub data: Field<'a>
 }
 
 // Contains data needed to get the file's url.
@@ -42,7 +43,7 @@ impl MediaController {
 }
 
 impl MediaController {
-    pub async fn upload_media(&self, mut info: MediaUploadInfo) -> Result<UploadedMediaInfo> {
+    pub async fn upload_media(&self, mut info: MediaUploadInfo<'static>) -> Result<UploadedMediaInfo> {
         let mut hasher = Sha256::new();
 
         // while let Some(chunk_result) = info.bytes.next().await {
