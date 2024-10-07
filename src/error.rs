@@ -9,11 +9,12 @@ pub type Result<T> = core::result::Result<T, Error>;
 #[derive(Clone, Debug, Serialize, AsRefStr)]
 #[serde(tag = "type", content = "why")]
 pub enum Error {
-    AuthFailNoAuthToken,
+    NoAuthError,
     DatabaseConnectionError,
     DatabaseQueryError,
     AxumError { why: String },
-    IOError
+    IOError,
+    Error { why: String }
 }
 
 #[derive(Clone, Debug, AsRefStr, Serialize)]
@@ -27,7 +28,7 @@ pub enum ClientError {
 impl Error { 
     pub fn to_status_and_client_error(&self) -> (StatusCode, ClientError) {
         match self {    
-            Self::AuthFailNoAuthToken => (
+            Self::NoAuthError => (
                 StatusCode::FORBIDDEN,
                 ClientError::NO_AUTH
             ),
@@ -39,6 +40,10 @@ impl Error {
             Self::AxumError { why } => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 ClientError::INTERNAL_ERROR { why: why.clone() }
+            ),
+            Self::Error { why } => (
+                StatusCode::BAD_REQUEST,
+                ClientError::BAD_REQUEST { why: why.clone() }
             ),
             _ => (
                 StatusCode::INTERNAL_SERVER_ERROR,

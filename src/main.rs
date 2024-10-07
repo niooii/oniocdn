@@ -1,12 +1,13 @@
 mod error;
 mod model;
 mod routes;
+mod controller;
 
 use std::env;
         
 use axum::{middleware, response::{IntoResponse, Response}, serve::serve, Json, Router};
 use error::Error;
-use model::MediaController;
+use controller::MediaController;
 use serde_json::json;                   
 use sqlx::PgPool;
 use tokio::net::TcpListener;
