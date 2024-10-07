@@ -13,7 +13,7 @@ pub enum Error {
     DatabaseConnectionError,
     DatabaseQueryError,
     AxumError { why: String },
-    IOError,
+    IOError { why: String },
     Error { why: String }
 }
 
@@ -44,6 +44,10 @@ impl Error {
             Self::Error { why } => (
                 StatusCode::BAD_REQUEST,
                 ClientError::BAD_REQUEST { why: why.clone() }
+            ),
+            Self::IOError { why } => (
+                StatusCode::BAD_REQUEST,
+                ClientError::INTERNAL_ERROR { why: why.clone() }
             ),
             _ => (
                 StatusCode::INTERNAL_SERVER_ERROR,

@@ -1,7 +1,7 @@
 use std::io::Write;
 use axum::{extract::{DefaultBodyLimit, Multipart, State}, routing::{delete, get, post}, Json, Router};
 use bytes::{Buf, Bytes};
-use tokio::fs::File;
+use tokio::{fs::File, io::AsyncWriteExt};
 use config::Config;
 use futures::{FutureExt, StreamExt, TryFutureExt};
 use sha2::{Digest, Sha256};
@@ -32,27 +32,21 @@ async fn upload(
         println!("Field name: {name}");
 
         let mut hasher = Sha256::new();
-	let file = File::open("./hichat.temp");
-
+	    let mut file = File::create("./hichat.temp").await
+            .map_err(|e| Error::IOError { why: e.to_string() } )?;
+        let mut size = 0;
         while let Some(chunk) = field.chunk().await
             .map_err(|e| Error::AxumError { why: format!("Chunk error: {}", e.body_text()) })? {
+            
+            file.write_all(&chunk).await.map_err(|e| Error::IOError { why: e.to_string() } )?;
+            size += chunk.len();
             hasher.write(&chunk).expect("Failed to hash shit");
-	file.write_all(&chunk).await.map_err(|e| { Error::IOError })?;
         }
 
-	file.flush();
+	    file.flush().await.expect("Bluh flushing file failed");
 
         let hash = hasher.finalize();
         println!("{hash:?}");
-
-        // mc.upload_media(info);
-        // println          !("Length of `{}` is {} bytes",   name, data.len());
-        // uploaded_media.push(
-        //     UploadedMediaInfo {
-        //         filename: name,
-        //         hash: String::new()
-        //     }
-        // );
 
         let info = MediaUploadInfo {
             filename: String::new(),
