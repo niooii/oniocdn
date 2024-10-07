@@ -1,7 +1,7 @@
 use std::io::Write;
-
 use axum::{extract::{DefaultBodyLimit, Multipart, State}, routing::{delete, get, post}, Json, Router};
 use bytes::{Buf, Bytes};
+use tokio::fs::File;
 use config::Config;
 use futures::{FutureExt, StreamExt, TryFutureExt};
 use sha2::{Digest, Sha256};
@@ -32,11 +32,15 @@ async fn upload(
         println!("Field name: {name}");
 
         let mut hasher = Sha256::new();
+	let file = File::open("./hichat.temp");
 
         while let Some(chunk) = field.chunk().await
             .map_err(|e| Error::AxumError { why: format!("Chunk error: {}", e.body_text()) })? {
             hasher.write(&chunk).expect("Failed to hash shit");
+	file.write_all(&chunk).await.map_err(|e| { Error::IOError })?;
         }
+
+	file.flush();
 
         let hash = hasher.finalize();
         println!("{hash:?}");
@@ -52,7 +56,7 @@ async fn upload(
 
         let info = MediaUploadInfo {
             filename: String::new(),
-            file_path: String::new(),
+            file_path: String::from("./hichat.temp"),
             file_size: 0
         };
 
