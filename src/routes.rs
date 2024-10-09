@@ -86,7 +86,8 @@ async fn upload(
             // Rename the file to have updated data
             let mut save_path: PathBuf = temp_path.clone();
             save_path.set_file_name(
-                format!(
+                // TODO! have impl functions from the Media struct like to_url and get_true_path or smthing..
+		format!(
                     "{}_{}_{}", 
                     uploaded_media.id, 
                     uploaded_media.uploaded_time, 
