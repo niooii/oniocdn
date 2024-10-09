@@ -42,14 +42,15 @@ async fn main_response_mapper(res: Response) -> Response {
 
     let error_response = sc_and_ce
         .as_ref()
-        .map(|(status_code, client_err)| {
+        .map(
+            |(status_code, client_err)| {
             let err_json = serde_json::to_value(client_err);
             let body = err_json.unwrap_or(json!("Failed to get error information."));
             println!("{:?}", client_err);
 
             (*status_code, Json(body)).into_response()
-
-        });
+            }
+        );
 
     error_response.unwrap_or(res)
 }                                                                     

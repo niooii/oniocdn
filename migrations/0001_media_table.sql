@@ -1,8 +1,9 @@
 CREATE TABLE IF NOT EXISTS media (
-    id SERIAL PRIMARY KEY,
-    time_uploaded   BIGINT NOT NULL,
-    time_expiring   BIGINT NOT NULL,
+    id              BIGSERIAL PRIMARY KEY NOT NULL,
+    uploaded_time   BIGINT NOT NULL,
+    accessed_time   BIGINT NOT NULL,
+    expiring_time   BIGINT NOT NULL,
+    file_size       BIGINT NOT NULL,
     file_path       TEXT NOT NULL,
-    file_size       INT NOT NULL,
     file_hash       TEXT NOT NULL
 );  
