@@ -67,9 +67,10 @@ async fn upload(
         };
         
         // Check-in file to database
-        let uploaded_media = mc.checkin_media(info).await?;
+        let uploaded_media: Media = mc.checkin_media(info).await?;
 
         // Ensure the file handle is dropped before doing anything
+        // ahem windows
         drop(file);
 
         // If the current upload_time is different 
