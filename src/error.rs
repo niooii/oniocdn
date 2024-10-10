@@ -14,7 +14,9 @@ pub enum Error {
     DatabaseQueryError,
     AxumError { why: String },
     IOError { why: String },
-    Error { why: String }
+    Error { why: String },
+    // This can also be returned if the checksum provided was invalid
+    NoMediaFound
 }
 
 #[derive(Clone, Debug, AsRefStr, Serialize)]
@@ -46,8 +48,12 @@ impl Error {
                 ClientError::BAD_REQUEST { why: why.clone() }
             ),
             Self::IOError { why } => (
-                StatusCode::BAD_REQUEST,
+                StatusCode::INTERNAL_SERVER_ERROR,
                 ClientError::INTERNAL_ERROR { why: why.clone() }
+            ),
+            Self::NoMediaFound => (
+                StatusCode::BAD_REQUEST,
+                ClientError::BAD_REQUEST { why: "No file found.".to_string() }
             ),
             _ => (
                 StatusCode::INTERNAL_SERVER_ERROR,

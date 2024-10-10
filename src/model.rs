@@ -1,13 +1,13 @@
-use std::{future::Future, path::Path, pin::Pin};
+use std::{future::Future, path::{Path, PathBuf}, pin::Pin};
 
 use axum::extract::multipart::Field;
 use futures::{Stream, StreamExt};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sha2::{ Digest, Sha256};
 use sqlx::PgPool;
 use tokio::io::{AsyncRead, AsyncReadExt};
 use bytes::Bytes;
-use crate::error::{Error, Result};
+use crate::{cdn_settings, error::{Error, Result}};
 
 // A row from the database.
 #[derive(Serialize)]
@@ -21,33 +21,55 @@ pub struct Media {
     pub expiring_time: i64,
     // Size of the file in bytes.
     pub file_size: i64,
-    // The path of where the file is stored on the host machine.
-    pub file_path: String,
+    // The name of the file on the host machine, including the extension.
+    pub file_name: String,
     // The SHA-256 checksum of the file.
     pub file_hash: String,
 }
 
 impl Media {
     // Returns a relative url to be attached to a base cdn url.
-    // Format: "/{id}_{uploaded_time}_fname.ext?checksum={hash}"
-    pub fn to_rel_url(&self) -> String {
-        let path = Path::new(&self.file_path);
-        // format!(
-        //     "/{}_{}_{}.{}", 
-        //     self.file_hash, 
-        //     self.id, 
-        //     path.file_name().unwrap(), 
-        //     path.extension()
-        // )
-        todo!()
+    // Format: "/fname.ext?id={id}&checksum={hash}"
+    pub fn rel_endpoint(&self) -> String {
+        format!(
+            "/{}?&id={}&checksum={}", 
+            self.file_name, 
+            self.id, 
+            self.file_hash  
+        )
+    }
+
+    pub fn true_filename(&self) -> String {
+        format!(
+            "{}_{}", 
+            self.id,
+            self.file_hash
+        )
+    }
+
+    pub async fn true_path(&self) -> PathBuf {
+        let save_dir: &String = &cdn_settings.read().await.save_dir;
+        let path: &Path = Path::new(save_dir);
+
+        path.join(&self.true_filename())
     }
 }
 
 pub struct MediaUploadInfo {
-    pub file_path: String,
+    pub file_name: String,
     pub file_size: i64,
     pub file_hash: String,
     pub upload_start_time: i64
+}           
+
+pub struct MediaRequestInfo {
+    pub id: i64,
+    pub file_name: String,
+    pub file_hash: String
 }
 
-// Model controllers    
+// CDN settings
+#[derive(Deserialize, Debug)]
+pub struct CdnSettings {
+    pub save_dir: String
+}
