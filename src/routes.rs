@@ -1,21 +1,23 @@
 use std::{io::Write, path::PathBuf, time::{SystemTime, UNIX_EPOCH}};
-use axum::{body::Body, extract::{DefaultBodyLimit, Multipart, Path, Query, State}, http::{header, HeaderValue}, response::Response, routing::{get, post}, Router};
+use axum::{body::Body, extract::{DefaultBodyLimit, Multipart, Path, Query, State}, http::{header, HeaderValue}, response::Response, routing::{get, post}, Json, Router};
 use serde::Deserialize;
+use serde_json::json;
+use sqlx::FromRow;
 use tokio::{fs::File, io::AsyncWriteExt};
 use sha2::{Digest, Sha256};
 use tokio_util::io::ReaderStream;
-use crate::{cdn_settings, error::{Error, Result}, model::{Media, MediaRequestInfo, MediaUploadInfo}};
+use crate::{cdn_settings, controller::{MediaCheckinResult, MediaDeleteResult}, error::{Error, Result}, model::{Media, MediaAccessInfo, MediaUploadInfo}};
 
 use crate::controller::MediaController;
 
 pub fn routes(mc: MediaController) -> Router{
     Router::new()
         .route(
-            "/media", post(upload_media).delete(delete_media).layer(
+            "/media", post(upload_media).layer(
             // TODO! file size limit
             DefaultBodyLimit::disable()
         ))
-        .route("/media/:file_name", get(get_media))
+        .route("/media/:file_name", get(get_media).delete(delete_media))
         .route("/ping", get(ping))
         .with_state(mc)
 }
@@ -71,17 +73,15 @@ async fn upload_media(
         };
         
         // Check-in file to database
-        let uploaded_media: Media = mc.checkin_media(info).await?;
+        let checkin_result: MediaCheckinResult = mc.checkin_media(info).await?;
+
+        let uploaded_media: &Media = &checkin_result.media;
 
         // Ensure the file handle is dropped before doing anything
         // ahem windows
         drop(file);
 
-        // If the current upload_time is different 
-        // from the returned media upload time, then the recieved file was
-        // a duplicate of another and we can discard the new downloaded file.
-
-        if uploaded_time != uploaded_media.uploaded_time {
+        if checkin_result.is_duplicate {
             tokio::fs::remove_file(&temp_path).await
                 .map_err(|e| Error::IOError { why: e.to_string() })?;
             println!("Removed duplicate file..")
@@ -108,7 +108,7 @@ async fn upload_media(
 }
 
 #[derive(Deserialize)]
-struct GetMediaQueryParams {
+struct AccessMediaQueryParams {
     id: i64,
     checksum: String
 }
@@ -116,24 +116,18 @@ struct GetMediaQueryParams {
 async fn get_media(
     State(mc): State<MediaController>,
     Path(file_name): Path<String>,
-    Query(q_params): Query<GetMediaQueryParams>
+    Query(q_params): Query<AccessMediaQueryParams>
 ) -> Result<Response> {
 
-    let req_info = MediaRequestInfo {
+    let info = MediaAccessInfo {
         id: q_params.id,
         file_hash: q_params.checksum,
         file_name: file_name.clone()
     };
 
-    let media: Media = if let Some(m) = mc.get_media(&req_info).await? {
-        m
-    } else {
-        return Err(Error::NoMediaFound)
-    };
+    let media: Media = mc.get_media(&info).await?;
 
-    let file = File::open(&media.true_path().await)
-        .await.expect("Could not open file");
-    let stream = ReaderStream::new(file);
+    let stream = media.reader_stream().await?;
     let body = Body::from_stream(stream);
     let mut res = Response::new(body);
     
@@ -145,24 +139,35 @@ async fn get_media(
         )
     );
     
-    // Get that built-in media player thingy
-    if !mime_type.starts_with("video/") && 
-       !mime_type.starts_with("audio/") && 
-       !mime_type.starts_with("image/") && 
-       mime_type != "application/pdf" {
-        res.headers_mut().append(
-            header::CONTENT_DISPOSITION,
-            HeaderValue::from_str(
-                &format!("attachment; filename=\"{}\"", file_name)
-            ).map_err(|_e| Error::Error { why: "Parse error".to_string() })?
-        );
-    }
-
+    res.headers_mut().append(
+        header::CONTENT_DISPOSITION,
+        HeaderValue::from_str(
+            &format!("inline; filename=\"{}\"", file_name)
+        ).map_err(|_e| Error::Error { why: "Parse error".to_string() })?
+    );
+    
     Ok(res)
 }
 
-async fn delete_media() {
+async fn delete_media(
+    State(mc): State<MediaController>,
+    Path(file_name): Path<String>,
+    Query(q_params): Query<AccessMediaQueryParams>
+) -> Result<Json<Media>> {
 
+    let info = MediaAccessInfo {
+        id: q_params.id,
+        file_hash: q_params.checksum,
+        file_name: file_name.clone()
+    };
+
+    let delete_result: MediaDeleteResult = mc.delete_media(&info).await?;
+
+    if delete_result.remaining_references == 0 {
+        delete_result.deleted.delete_from_disk().await?;
+    }
+    
+    Ok(Json(delete_result.deleted))
 }
 
 async fn ping() -> &'static str {

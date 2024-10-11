@@ -1,6 +1,6 @@
 use std::{path::Path, sync::{Arc, Mutex}, time::{SystemTime, UNIX_EPOCH}};
 
-use crate::{error::Result, model::{Media, MediaRequestInfo, MediaUploadInfo}, Error};
+use crate::{error::Result, model::{Media, MediaAccessInfo, MediaUploadInfo}, Error};
 use serde::{Serialize, Deserialize};
 use sqlx::{postgres::PgRow, query, FromRow, PgPool, Row};
 
@@ -42,36 +42,35 @@ async fn insert_info(db_pool: &PgPool, info: &MediaUploadInfo) -> Result<Media> 
         .map_err(|_| Error::DatabaseQueryError)
 }
 
+pub struct MediaCheckinResult {
+    pub media: Media,
+    pub is_duplicate: bool
+}
+
+pub struct MediaDeleteResult {
+    pub deleted: Media,
+    pub remaining_references: u32
+}
+
 impl MediaController {
-    pub async fn checkin_media(&self, info: MediaUploadInfo) -> Result<Media> {
-        let no_duplicates: bool = true;
-        let media: Media = if no_duplicates {
-            // Check for hash existing first
-            // TODO! can i do this without 2 separate queries..
-            let existing: Option<Media> = sqlx::query_as!(
-                Media,
-                "SELECT * FROM media
-                WHERE file_hash=$1",
-                info.file_hash
-            )
-                .fetch_optional(&self.db_pool).await
-                .map_err(|_| Error::DatabaseQueryError)?;
+    pub async fn checkin_media(&self, info: MediaUploadInfo) -> Result<MediaCheckinResult> {
+        // TODO! how do i achieve this with one query bruh
+        let existing: Option<Media> = sqlx::query_as!(
+            Media,
+            "SELECT * FROM media
+            WHERE file_hash = $1
+            LIMIT 1",
+            info.file_hash
+        )
+            .fetch_optional(&self.db_pool).await
+            .map_err(|_| Error::DatabaseQueryError)?;
 
-            // Can't use unwrap_or, eagerly evaluated.
-            // Either returns existing or inserts a new one.
-            if let Some(media) = existing {
-                media
-            } else {
-                insert_info(&self.db_pool, &info).await?
-            }
-        } else {
-            insert_info(&self.db_pool, &info).await?
-        };
+        let media: Media = insert_info(&self.db_pool, &info).await?;
 
-        Ok(media)
+        Ok(MediaCheckinResult { media, is_duplicate: existing.is_some() })
     }
 
-    pub async fn get_media(&self, info: &MediaRequestInfo) -> Result<Option<Media>> {
+    pub async fn get_media(&self, info: &MediaAccessInfo) -> Result<Media> {
         Ok(
             sqlx::query_as!(
                 Media,
@@ -82,10 +81,44 @@ impl MediaController {
             )
             .fetch_optional(&self.db_pool).await
             .map_err(|_| Error::DatabaseQueryError)?
+            .ok_or_else(|| Error::NoMediaFound)?
         )
     }
 
-    pub async fn delete_media() {
+    // Returns a tuple containing the deleted media entry,
+    // and the amount of entries remaining that rely on the underlying file
+    // of this entry. (if zero, then that file is safe to be deleted.)
+    pub async fn delete_media(&self, info: &MediaAccessInfo) -> Result<MediaDeleteResult> {
+        // TODO! I don't need the count of references, only if there 
+        // is a reference remaining. COUNT(*) is supposedly expensive.
+        let query = 
+            r#"WITH deleted AS (
+                DELETE FROM media
+                WHERE id = $1 AND file_hash = $2
+                RETURNING *
+            )
+            SELECT
+                deleted.*,
+                (SELECT COUNT(*) FROM media WHERE file_hash = $2) as count
+            FROM deleted"#; 
 
+        let row = sqlx::query(
+            query
+        )
+        .bind(info.id)
+        .bind(info.file_hash.clone())
+        .fetch_optional(&self.db_pool).await
+        .map_err(|_| Error::DatabaseQueryError)?
+        .ok_or_else(|| Error::NoMediaFound)?;
+
+        let deleted = Media::from_row(&row)
+            .map_err(|_e| Error::DatabaseQueryError)?;
+
+        // TODO! assume this doesn't overflow.. right..?
+        // For unknown reasons this includes the just deleted entry,
+        // so subtract one for accurate count.
+        let remaining_references: u32 = row.get::<i64, &str>("count") as u32 - 1;
+        
+        Ok(MediaDeleteResult { deleted, remaining_references })
     } 
 }

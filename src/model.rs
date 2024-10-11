@@ -4,13 +4,14 @@ use axum::extract::multipart::Field;
 use futures::{Stream, StreamExt};
 use serde::{Deserialize, Serialize};
 use sha2::{ Digest, Sha256};
-use sqlx::PgPool;
-use tokio::io::{AsyncRead, AsyncReadExt};
+use sqlx::{prelude::FromRow, PgPool};
+use tokio::{fs::File, io::{AsyncRead, AsyncReadExt}};
 use bytes::Bytes;
+use tokio_util::io::ReaderStream;
 use crate::{cdn_settings, error::{Error, Result}};
 
 // A row from the database.
-#[derive(Serialize)]
+#[derive(Serialize, FromRow)]
 pub struct Media {
     pub id: i64,
     // Unix timestamp in milliseconds.
@@ -39,21 +40,39 @@ impl Media {
         )
     }
 
+    // Returns what this file should be named.
     pub fn true_filename(&self) -> String {
-        format!(
-            "{}_{}", 
-            self.id,
-            self.file_hash
-        )
+        // Just use the file hash igs
+        // If there's a cache collision using SHA-256,
+        // I will throw my computer into the sun
+        self.file_hash.clone()
     }
 
+    // Returns the path of this file on the host machine's filesystem.
+    // Is not guarenteed a file exists at this path.
     pub async fn true_path(&self) -> PathBuf {
         let save_dir: &String = &cdn_settings.read().await.save_dir;
         let path: &Path = Path::new(save_dir);
 
         path.join(&self.true_filename())
     }
+
+    // Get a ReaderStream from the file, or an Err if it doesn't exist.
+    pub async fn reader_stream(&self) -> Result<ReaderStream<File>> {
+        let file = File::open(&self.true_path().await)
+            .await.map_err(|e| Error::IOError { why: e.to_string() })?;
+
+        Ok(ReaderStream::new(file))
+    }
+
+    // Attempts to delete the underlying file from the disk.
+    pub async fn delete_from_disk(&self) -> Result<()> {
+        Ok(tokio::fs::remove_file(self.true_path().await.as_path()).await
+            .map_err(|e| Error::IOError { why: e.to_string() })?)
+    }
 }
+
+// Structs to be passed as info to the controller
 
 pub struct MediaUploadInfo {
     pub file_name: String,
@@ -62,13 +81,14 @@ pub struct MediaUploadInfo {
     pub upload_start_time: i64
 }           
 
-pub struct MediaRequestInfo {
+pub struct MediaAccessInfo {
     pub id: i64,
     pub file_name: String,
     pub file_hash: String
 }
 
-// CDN settings
+// Global configuration settings
+
 #[derive(Deserialize, Debug)]
 pub struct CdnSettings {
     pub save_dir: String
