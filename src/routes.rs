@@ -145,7 +145,12 @@ async fn get_media(
             &format!("inline; filename=\"{}\"", file_name)
         ).map_err(|_e| Error::Error { why: "Parse error".to_string() })?
     );
-    
+
+    res.headers_mut().append(
+        header::ACCEPT_RANGES,
+        HeaderValue::from_static("bytes")
+    );
+
     Ok(res)
 }
 
