@@ -148,7 +148,8 @@ async fn get_media(
     // Get that built-in media player thingy
     if !mime_type.starts_with("video/") && 
        !mime_type.starts_with("audio/") && 
-       !mime_type.starts_with("image/") {
+       !mime_type.starts_with("image/") && 
+       mime_type != "application/pdf" {
         res.headers_mut().append(
             header::CONTENT_DISPOSITION,
             HeaderValue::from_str(
