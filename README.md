@@ -1,13 +1,14 @@
-# oniocdn
-Oniocdn is a cdn (content distribution network) node written in rust.
+# ocloud
+ocloud (onion cloud) is a suite of tools for a convenient self-hosted cloud.
 
 # Features
-Does not store duplicate files.
+CDN node, cli
 
 # Configuration
 WIP...
 
 # To-do
-- Add buffered video streaming (it loads the whole thing once right now, very slow)
+- Add video streaming
+- Integrate OpenGraph for things like discord
 - Make a command-line app to easily upload files
-- Make a front-end application for an easier interface
+- Make a front-end application (probably flutter) for an easier interface
