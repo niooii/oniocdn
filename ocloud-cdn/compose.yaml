@@ -1,6 +1,6 @@
 services:
   db:
-    container_name: oniocdn-db
+    container_name: ocloud-cdn-db
     image: postgres:16
     restart: always
     environment:
@@ -10,7 +10,7 @@ services:
     ports:
       - 9432:5432
     volumes:
-      - oniocdn-data:/var/lib/postgresql/data
+      - ocloud-cdn-data:/var/lib/postgresql/data
 
 volumes:
-  oniocdn-data: 
+  ocloud-cdn-data: 
