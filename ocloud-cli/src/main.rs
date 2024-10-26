@@ -1,13 +1,15 @@
 mod upload;
 mod config;
 
-use std::{path::{Path, PathBuf}, str::FromStr};
+use std::{path::{Path, PathBuf}, process::exit, str::FromStr};
+use arboard::Clipboard;
 use reqwest::Url;
 use toml::toml;
 use anyhow::{Error, Result};
 use clap::{Parser, Subcommand};
 use config::Config;
 use tokio::fs::File;
+use upload::UploadError;
 
 pub const CLOUD_URL: &str = "cloud_url";
 
@@ -35,30 +37,54 @@ async fn main() -> Result<()> {
 
     let mut config = Config::from_file(&config_path).await?;
 
+    let mut clipboard: Clipboard = Clipboard::new()?;
+
     match &cli.command {
-        
+        // https://stackoverflow.com/questions/70252995/how-to-monitor-reqwest-client-upload-progress
         Commands::Upload { path } => {
-            if let Err(e) = Url::parse(&config.cloud_url) {
+            if let Err(_) = Url::parse(&config.cloud_url) {
+                eprintln!("Error: cloud url is invalid or does not exist.");
                 eprintln!("Use the set-url command to set a cloud url.");
-                return Err(Error::from(e));
+                exit(1);
             }
-            if let Err(e) = upload::upload_file(&Path::new(path), &config).await {
-                eprintln!("Failed to upload file: {e}");
+
+            // Fix url if the trailing slash is missing
+            if !config.cloud_url.ends_with("/") {
+                config.cloud_url.push_str("/");
+                config.save_to(&config_path).await?;
+            };
+
+            match upload::upload_file(&Path::new(path), &config).await {
+                Ok(url) => {
+                    println!("{url}");
+                    clipboard.set_text(url)?;
+                    println!("Copied url to clipboard!");
+                }
+                Err(e) => {
+                    match e {
+                        UploadError::NoFileFound => 
+                            eprintln!("File does not exist."),
+                        UploadError::ReqwestError { err } => 
+                            eprintln!("Reqwest error: {}", err),
+                        UploadError::FailStatusCode { status_code } => 
+                            eprintln!("Request failed with status code: {}", status_code)
+                    }
+                    exit(1);
+                },
             }
-            println!("done");
         },
 
         Commands::SetUrl { url } => {
-            if let Err(e) = Url::parse(url) {
+            if let Err(_) = Url::parse(url) {
                 eprintln!("Invalid cloud url: \"{}\". Check the input and try again.", url);
-                return Err(Error::from(e));
-            }
+                exit(1);
+            } 
 
             config.cloud_url = url.clone();
             
             if let Err(e) = config.save_to(&config_path).await {
                 eprintln!("Failed to save config changes: {e}");
-                return Err(e);
+                exit(1);
             }
 
             println!("Done.");

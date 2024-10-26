@@ -26,7 +26,7 @@ impl Config {
         Ok(
             toml::from_str(&toml_str)?
         )
-    }
+     }
 
     pub async fn from_file(path: &Path) -> Result<Self> {
         let mut file = File::open(path).await?;
