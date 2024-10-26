@@ -11,7 +11,8 @@ use config::Config;
 use tokio::fs::File;
 use upload::UploadError;
 
-pub const CLOUD_URL: &str = "cloud_url";
+// Used for making config folders etc
+pub const PROGRAM_NAME: &str = "ocloud";
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -31,10 +32,11 @@ enum Commands {
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
-
+    
     let config_path = dirs::config_dir().unwrap_or_default()
+        .join("ocloud")
         .join("config.toml");
-
+    
     let mut config = Config::from_file(&config_path).await?;
 
     let mut clipboard: Clipboard = Clipboard::new()?;

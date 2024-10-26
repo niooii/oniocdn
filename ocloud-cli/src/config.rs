@@ -1,7 +1,7 @@
 use std::path::Path;
 use toml::toml;
 use serde::{Deserialize, Serialize};
-use tokio::{fs::File, io::{AsyncReadExt, AsyncWriteExt}};
+use tokio::{fs::{self, File}, io::{AsyncReadExt, AsyncWriteExt}};
 use anyhow::Result;
 
 #[derive(Deserialize, Serialize)]
@@ -12,6 +12,10 @@ pub struct Config {
 impl Config {
     /// Creates a default configuration file at the specified path.
     pub async fn create_at_path(path: &Path) -> Result<Self> {
+        if let Some(d) = path.parent() {
+            tokio::fs::create_dir_all(d).await?;
+        }
+
         let mut file = File::create(path).await?;
 
         let toml = 
@@ -29,7 +33,13 @@ impl Config {
      }
 
     pub async fn from_file(path: &Path) -> Result<Self> {
-        let mut file = File::open(path).await?;
+        // If file doesn't exist create.
+        let mut file = if let Ok(f) = File::open(path).await {
+            f
+        } else {
+            return Self::create_at_path(path).await;
+        };
+
         let mut contents = String::new();
         file.read_to_string(&mut contents).await?;
 
@@ -37,6 +47,7 @@ impl Config {
         
         Ok(
             match toml::from_str::<Config>(&contents) {
+                // If deserialize error then just override with default stuff.
                 Err(e) => Self::create_at_path(path).await?,
                 Ok(t) => t
             }
