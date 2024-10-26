@@ -33,7 +33,7 @@ impl Media {
     // Format: "/fname.ext?id={id}&checksum={hash}"
     pub fn rel_endpoint(&self) -> String {
         format!(
-            "/{}?&id={}&checksum={}", 
+            "{}?&id={}&checksum={}", 
             self.file_name, 
             self.id, 
             self.file_hash  
